@@ -1,0 +1,11 @@
+# dsh-lark-bridge — installable DSH profile bundle layer.
+# M0: minimal skeleton. The plugin row below is merged into the profile tree
+# after dsh-base / dsh-web-app; config keys must match src Config schema.
+- insert:
+    - id: dsh-lark-bridge
+      name: '@tankecho42/dsh-lark-bridge'
+      config:
+        appId: ''
+        appSecret: ''
+        dataDir: ''
+        autoStart: true
