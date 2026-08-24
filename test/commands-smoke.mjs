@@ -158,26 +158,27 @@ check('fmtSmartSec hour boundary', fmtSmartSec(3600) === '1h00m00s')
 check('fmtSmartSec hours with padding', fmtSmartSec(3920) === '1h05m20s')
 check('streaming card uses smart duration', JSON.stringify(buildStreamingCard('x', { elapsed: 750 })).includes('12m30s'))
 
-// context donut: Plotly pie + hole, default placement outside the panel
+// context donut: VChart pie (Echo footer dialect), lives inside the footer panel
 {
   const pressure = { pressureTokens: 1000, projectedTokens: 32000, contextWindow: 128000 }
   const chart = buildContextDonutChart(pressure)
-  check('context chart is donut', chart?.tag === 'chart' && chart.chart_spec?.data?.[0]?.type === 'pie' && chart.chart_spec.data[0].hole > 0)
-  check('context chart uses projected occupancy', JSON.stringify(chart?.chart_spec?.data?.[0]?.values) === JSON.stringify([32000, 96000]))
-  check('context chart has used/remaining labels', JSON.stringify(chart?.chart_spec?.data?.[0]?.labels) === JSON.stringify(['已用', '剩余']))
+  check('context chart is VChart pie', chart?.tag === 'chart' && chart.chart_spec?.type === 'pie' && chart.chart_spec.data?.values?.length === 2)
+  check('context chart uses projected occupancy (K)', JSON.stringify(chart?.chart_spec?.data?.values) === JSON.stringify([{ type: '已用', value: 32 }, { type: '剩余', value: 96 }]))
   const card = buildDoneCard('done', { elapsed: 47, model: 'model-x', tools: [{}], contextPressure: pressure, tokenUsage: { uncachedInputTokens: 200, cacheReadTokens: 800, cacheWriteTokens: 50, outputTokens: 125 } })
-  const chartIndex = card.elements.findIndex((e) => e.tag === 'chart')
-  const footerIndex = card.elements.findIndex((e) => e.tag === 'collapsible_panel' && e.border?.color === 'grey')
-  check('context chart defaults outside footer panel', FOOTER_CHART_INSIDE_PANEL === false && chartIndex >= 0 && chartIndex < footerIndex)
-  check('footer shows five metrics and cache ratio', JSON.stringify(card).includes('model-x') && JSON.stringify(card).includes('Context') && JSON.stringify(card).includes('Input 1,050') && JSON.stringify(card).includes('缓存命中 80%') && JSON.stringify(card).includes('工具调用') && JSON.stringify(card).includes('整体时长'))
+  const footer = card.elements.filter((e) => e.tag === 'collapsible_panel').pop()
+  const tags = footer?.elements?.map((e) => e.tag).join(',')
+  check('footer panel holds model md + context md + donut + token md + bar + tail md', tags === 'markdown,markdown,chart,markdown,chart,markdown')
+  check('footer shows model/context/cache metrics', JSON.stringify(card).includes('model-x') && JSON.stringify(card).includes('上下文占用 25%') && JSON.stringify(card).includes('缓存命中 80%') && JSON.stringify(card).includes('工具调用') && JSON.stringify(card).includes('整体时长'))
+  check('footer title prefixed with chart emoji', (footer?.header?.title?.content || '').startsWith('📊'))
 }
 
-// Missing projections degrade to text fallbacks and omit a misleading chart.
+// Missing projections degrade gracefully and omit a misleading chart.
 {
   const card = buildDoneCard('done')
-  const footer = card.elements.find((e) => e.tag === 'collapsible_panel')
-  check('missing footer data uses fallback', footer?.elements?.[0]?.content?.includes('**模型**：—') && footer.elements[0].content.includes('**Context**：—') && footer.elements[0].content.includes('**Token**：—') && footer.elements[0].content.includes('**整体时长**：—'))
-  check('missing context omits chart', buildContextDonutChart({ pressureTokens: 100 }) === null && !card.elements.some((e) => e.tag === 'chart'))
+  const footer = card.elements.filter((e) => e.tag === 'collapsible_panel').pop()
+  check('missing data still shows model line + tool/duration', (footer?.elements?.[0]?.content || '').includes('模型 —') && JSON.stringify(card).includes('整体时长') && JSON.stringify(card).includes('工具调用'))
+  check('missing context omits donut, missing usage omits bar', !footer?.elements?.some((e) => e.tag === 'chart' && e.chart_spec?.type === 'pie') && !footer?.elements?.some((e) => e.tag === 'chart' && e.chart_spec?.type === 'bar'))
+  check('bare donut without window is null', buildContextDonutChart({ pressureTokens: 100 }) === null)
 }
 
 if (failures > 0) { console.error(`\n${failures} FAIL`); process.exit(1) }
