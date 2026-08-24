@@ -163,7 +163,7 @@ check('streaming card uses smart duration', JSON.stringify(buildStreamingCard('x
   const pressure = { pressureTokens: 1000, projectedTokens: 32000, contextWindow: 128000 }
   const chart = buildContextDonutChart(pressure)
   check('context chart is VChart pie', chart?.tag === 'chart' && chart.chart_spec?.type === 'pie' && chart.chart_spec.data?.values?.length === 2)
-  check('context chart uses projected occupancy (K)', JSON.stringify(chart?.chart_spec?.data?.values) === JSON.stringify([{ type: '已用', value: 32 }, { type: '剩余', value: 96 }]))
+  check('context chart uses raw token occupancy', JSON.stringify(chart?.chart_spec?.data?.values) === JSON.stringify([{ type: '已用', value: 32000 }, { type: '剩余', value: 96000 }]))
   const card = buildDoneCard('done', { elapsed: 47, model: 'model-x', tools: [{}], contextPressure: pressure, tokenUsage: { uncachedInputTokens: 200, cacheReadTokens: 800, cacheWriteTokens: 50, outputTokens: 125 } })
   const footer = card.elements.filter((e) => e.tag === 'collapsible_panel').pop()
   const tags = footer?.elements?.map((e) => e.tag).join(',')
