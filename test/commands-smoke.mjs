@@ -4,7 +4,7 @@
  */
 const mod = await import('../lib/commands.js')
 const { commands, findCommand, handleBridgeAction } = mod
-const { buildCommandCard } = await import('../lib/card.js')
+const { buildCommandCard, buildDoneCard, buildStreamingCard, buildContextDonutChart, fmtSmartSec, FOOTER_CHART_INSIDE_PANEL } = await import('../lib/card.js')
 
 let failures = 0
 function check(label, cond, extra) {
@@ -149,6 +149,36 @@ const stubPresets = () => ({
 
 // legacy buildCommandCard still exports (index.js compat)
 check('legacy buildCommandCard export intact', typeof buildCommandCard === 'function')
+
+// reply-card footer duration formatting
+check('fmtSmartSec seconds', fmtSmartSec(47) === '47s')
+check('fmtSmartSec minutes', fmtSmartSec(750) === '12m30s')
+check('fmtSmartSec minute boundary', fmtSmartSec(60) === '1m00s')
+check('fmtSmartSec hour boundary', fmtSmartSec(3600) === '1h00m00s')
+check('fmtSmartSec hours with padding', fmtSmartSec(3920) === '1h05m20s')
+check('streaming card uses smart duration', JSON.stringify(buildStreamingCard('x', { elapsed: 750 })).includes('12m30s'))
+
+// context donut: Plotly pie + hole, default placement outside the panel
+{
+  const pressure = { pressureTokens: 1000, projectedTokens: 32000, contextWindow: 128000 }
+  const chart = buildContextDonutChart(pressure)
+  check('context chart is donut', chart?.tag === 'chart' && chart.chart_spec?.data?.[0]?.type === 'pie' && chart.chart_spec.data[0].hole > 0)
+  check('context chart uses projected occupancy', JSON.stringify(chart?.chart_spec?.data?.[0]?.values) === JSON.stringify([32000, 96000]))
+  check('context chart has used/remaining labels', JSON.stringify(chart?.chart_spec?.data?.[0]?.labels) === JSON.stringify(['已用', '剩余']))
+  const card = buildDoneCard('done', { elapsed: 47, model: 'model-x', tools: [{}], contextPressure: pressure, tokenUsage: { uncachedInputTokens: 200, cacheReadTokens: 800, cacheWriteTokens: 50, outputTokens: 125 } })
+  const chartIndex = card.elements.findIndex((e) => e.tag === 'chart')
+  const footerIndex = card.elements.findIndex((e) => e.tag === 'collapsible_panel' && e.border?.color === 'grey')
+  check('context chart defaults outside footer panel', FOOTER_CHART_INSIDE_PANEL === false && chartIndex >= 0 && chartIndex < footerIndex)
+  check('footer shows five metrics and cache ratio', JSON.stringify(card).includes('model-x') && JSON.stringify(card).includes('Context') && JSON.stringify(card).includes('Input 1,050') && JSON.stringify(card).includes('缓存命中 80%') && JSON.stringify(card).includes('工具调用') && JSON.stringify(card).includes('整体时长'))
+}
+
+// Missing projections degrade to text fallbacks and omit a misleading chart.
+{
+  const card = buildDoneCard('done')
+  const footer = card.elements.find((e) => e.tag === 'collapsible_panel')
+  check('missing footer data uses fallback', footer?.elements?.[0]?.content?.includes('**模型**：—') && footer.elements[0].content.includes('**Context**：—') && footer.elements[0].content.includes('**Token**：—') && footer.elements[0].content.includes('**整体时长**：—'))
+  check('missing context omits chart', buildContextDonutChart({ pressureTokens: 100 }) === null && !card.elements.some((e) => e.tag === 'chart'))
+}
 
 if (failures > 0) { console.error(`\n${failures} FAIL`); process.exit(1) }
 console.log('\nALL PASS')
