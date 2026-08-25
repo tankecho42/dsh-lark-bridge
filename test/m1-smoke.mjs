@@ -10,6 +10,9 @@
  * 用法: NODE_PATH=<deepseek-harness>/node_modules node test/m1-smoke.mjs
  */
 import { createRequire } from 'node:module'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 const require = createRequire(import.meta.url)
 const mod = await import('../lib/index.js')
@@ -30,6 +33,7 @@ console.log('# M1 smoke test')
 check('export name', mod.name === '@tankecho42/dsh-lark-bridge', mod.name)
 check('inject includes agents', Array.isArray(mod.inject) && mod.inject.includes('agents'), mod.inject)
 check('inject includes agentDefaultModel', Array.isArray(mod.inject) && mod.inject.includes('agentDefaultModel'), mod.inject)
+check('inject includes attachments', Array.isArray(mod.inject) && mod.inject.includes('attachments'), mod.inject)
 check('Config callable', typeof mod.Config === 'function')
 
 // --- 2. Config schema ---
@@ -43,6 +47,8 @@ try {
 // --- 3. mock ctx + apply ---
 const registeredTools = []
 const eventHandlers = {}
+const testDataDir = mkdtempSync(join(tmpdir(), 'dsh-lark-m1-'))
+let effectDispose
 const mockCtx = {
   tools: { register(tool) { registeredTools.push(tool) } },
   agents: {
@@ -50,12 +56,13 @@ const mockCtx = {
     async resume() { throw new Error('not used in smoke') },
   },
   agentDefaultModel: { currentSelection: () => ({ provider: 'glm-coding', model: 'glm-5.2' }) },
+  attachments: { async saveImages() { return [] } },
   on(event, fn) { eventHandlers[event] = fn },
-  effect(fn) { return fn() },
+  effect(fn) { effectDispose = fn(); return effectDispose },
   logger: { info() {}, warn() {} },
 }
 
-await mod.apply(mockCtx, mod.Config({}))
+await mod.apply(mockCtx, mod.Config({ dataDir: testDataDir }))
 
 // --- 4. tool registration ---
 check('registered 1 tool', registeredTools.length === 1, registeredTools.map((t) => t.name))
@@ -74,6 +81,9 @@ check('session/event handler registered', typeof eventHandlers['session/event'] 
 // We can't observe feishu directly, but apply() completed without throwing
 // while configured=false means the effect skipped FeishuClient.start().
 check('apply completed without throw (unconfigured)', true)
+
+if (typeof effectDispose === 'function') effectDispose()
+rmSync(testDataDir, { recursive: true, force: true })
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURES`)
 process.exit(failures === 0 ? 0 : 1)

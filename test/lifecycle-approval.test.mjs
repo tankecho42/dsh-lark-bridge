@@ -165,3 +165,21 @@ test('ApprovalBridge normalizes HTTP endpoints and rejects unsafe protocols', ()
     webUrl: 'file:///tmp/socket', feishu: {}, sessions: {}, log() {},
   }), /http or https/)
 })
+
+test('expired approval is rejected and its card is sealed as timed out', async () => {
+  const { bridge, updates } = approvalFixture()
+  const outcomes = []
+  bridge._respond = async (_entry, outcome) => { outcomes.push(outcome); return true }
+  bridge.pending.set('rpc-timeout', {
+    rpcId: 'rpc-timeout', sessionId: 'session-1', approvalId: 'approval-timeout',
+    toolName: 'shell', cardMessageId: 'card-timeout', timer: null,
+  })
+
+  bridge._expire('rpc-timeout')
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.deepEqual(outcomes, ['rejected'])
+  assert.equal(bridge.pending.has('rpc-timeout'), false)
+  assert.equal(updates.length, 1)
+  assert.match(JSON.stringify(updates[0]), /超时拒绝/)
+})

@@ -10,7 +10,7 @@
  * 用法: node test/m0-smoke.mjs
  */
 import { createRequire } from 'node:module'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -104,13 +104,27 @@ if (port > 0) {
   check('GET /status 200', resp.status === 200, resp.status)
   check('status payload plugin', body.plugin === '@tankecho42/dsh-lark-bridge', body.plugin)
   check('status payload milestone M3', body.milestone === 'M3', body.milestone)
-  check('status payload version', body.version === '0.3.0', body.version)
+  check('status payload version', body.version === '0.4.0', body.version)
   check('status payload exposes safe transport metrics', body.apiRetries === 0 && body.pendingCardMessages === 0, body)
   check('status payload exposes rotated log path', String(body.logPath).endsWith('/logs/plugin.log'), body.logPath)
+
+  const healthResp = await fetch(`http://127.0.0.1:${port}/healthz`)
+  check('GET /healthz 200', healthResp.status === 200, healthResp.status)
+  const readyResp = await fetch(`http://127.0.0.1:${port}/readyz`)
+  check('GET /readyz fails closed while unconfigured', readyResp.status === 503, readyResp.status)
+  const metricsResp = await fetch(`http://127.0.0.1:${port}/metrics`)
+  const metrics = await metricsResp.text()
+  check('GET /metrics exposes Prometheus readiness', metricsResp.status === 200 && metrics.includes('dsh_lark_bridge_ready 0'), metrics)
+
+  const discoveryPath = join(testDataDir, 'health-endpoint.json')
+  const discovery = JSON.parse(readFileSync(discoveryPath, 'utf8'))
+  check('health discovery file is owner-scoped', discovery.port === port && typeof discovery.owner === 'string' && discovery.owner.length > 10, discovery)
+  check('health discovery file is private', (statSync(discoveryPath).mode & 0o777) === 0o600, statSync(discoveryPath).mode & 0o777)
 }
 
 // --- cleanup ---
 if (typeof dispose === 'function') dispose()
+check('health discovery file removed on dispose', !existsSync(join(testDataDir, 'health-endpoint.json')))
 rmSync(testDataDir, { recursive: true, force: true })
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURES`)

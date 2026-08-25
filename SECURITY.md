@@ -41,6 +41,28 @@ history.
 
 ## Deployment checklist
 
+### DSH credential format compatibility gate
+
+The bridge does not read, migrate, or write `~/.dsh/.credentials.yaml`. Credential
+format belongs to the DSH host, so host and credential changes must be released as
+one coordinated unit:
+
+| DSH host/toolchain | Supported credential format | Release rule |
+| --- | --- | --- |
+| `0.1.0-rc.8` production rollback line | legacy flat mapping | Keep the current flat file; do not restore a `version: 1` + `refs` backup while this host is active. |
+| a verified `0.1.1-rc.x` or newer build with refs support | `version: 1` + `refs` | Restore the reviewed new-format backup only inside the same maintenance window as the host upgrade. Never let this bridge auto-migrate it. |
+
+Before changing either side, preserve both the known-good flat file and the
+reviewed new-format backup in a restricted location, record their exact target
+versions, and prepare a paired rollback. After starting the upgraded host, read
+`dataDir/health-endpoint.json`, require `/readyz` to return 200, then run
+`/doctor` before accepting traffic. If either check fails, stop the new process,
+restore the previous host plus its matching flat credential file, and verify the
+old readiness path. Never test a credential format by repeatedly restarting the
+production process.
+
+### General release checks
+
 - Review the release-candidate branch and its test/CI changes.
 - Configure `allowedUserIds`, `allowedChatIds`, `adminUserIds`, and
   `workspaceRoots` before exposing the bridge to production chats.
@@ -50,6 +72,8 @@ history.
   `npm pack --dry-run`.
 - Restart one bridge instance only; confirm the old WebSocket closes before the
   replacement accepts traffic.
+- Read `health-endpoint.json`, require `/healthz` and `/readyz` to return 200,
+  and confirm `dsh_lark_bridge_ready 1` on `/metrics` before widening traffic.
 - Verify p2p chat, a real group mention, ignored non-mentions, `/cwd`, `/tools`,
   `/doctor`, `/stop`, approval allow/reject/session-allow, duplicate event
   suppression, retry behavior, log rotation, and one HMR/reload cycle.

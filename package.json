@@ -1,6 +1,6 @@
 {
   "name": "@tankecho42/dsh-lark-bridge",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "DSH (DeepSeek Harness) Feishu/Lark bridge plugin - talk to your DSH agents from Feishu DM and group chats via long-connection event subscription",
   "type": "module",
   "engines": {
@@ -39,6 +39,7 @@
   ],
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-attachment": "*",
     "@deepseek-ai/schemastery": "^3.18.1",
     "@deepseek-ai/dsh-session": "*",
     "@deepseek-ai/dsh-llm": "*"

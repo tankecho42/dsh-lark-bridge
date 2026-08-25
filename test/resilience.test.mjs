@@ -57,6 +57,14 @@ test('Feishu API retries documented rate-limit responses and honors Retry-After'
   assert.equal(client.diagnostics().retries, 1)
 })
 
+test('terminal HTTP-200 Feishu API errors count as failures', async () => {
+  const client = transportClient(async () => jsonResponse({ code: 230001, msg: 'permission denied' }))
+
+  await assert.rejects(client.api('GET', '/open-apis/denied'), /230001/)
+
+  assert.equal(client.diagnostics().apiFailures, 1)
+})
+
 test('outbound message retries are idempotent through one stable uuid', async () => {
   const bodies = []
   let calls = 0
@@ -87,6 +95,92 @@ test('reply payload uses Feishu reply schema and carries an idempotency uuid', a
 
   assert.ok(body.uuid)
   assert.equal(body.receive_id, undefined)
+})
+
+test('thread reply payload opts into reply_in_thread', async () => {
+  let body
+  const client = transportClient(async (_url, init) => {
+    body = JSON.parse(init.body)
+    return jsonResponse({ code: 0, data: { message_id: 'om_thread_reply' } })
+  })
+
+  await client.sendCard('oc_unused', { schema: '2.0' }, 'om_parent', { replyInThread: true })
+
+  assert.equal(body.receive_id, undefined)
+  assert.equal(body.reply_in_thread, true)
+})
+
+test('resource download retries Feishu rate-limit codes and bounds the error body', async () => {
+  const waits = []
+  const statuses = []
+  let calls = 0
+  const client = transportClient(async () => {
+    calls++
+    if (calls === 1) {
+      return jsonResponse({ code: 99991400, msg: 'rate limited' }, {
+        status: 400,
+        headers: { 'retry-after': '1' },
+      })
+    }
+    return new Response(new Uint8Array([1, 2, 3]), {
+      status: 200,
+      headers: { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="ok.bin"' },
+    })
+  }, {
+    sleep: async (ms) => waits.push(ms),
+    onStatus: (info) => statuses.push(info),
+  })
+
+  const result = await client.downloadResource('om_test', 'file_test', 'file', { maxBytes: 10 })
+
+  assert.equal(calls, 2)
+  assert.deepEqual(waits, [1000])
+  assert.equal(statuses[0]?.code, 99991400)
+  assert.equal(result.fileName, 'ok.bin')
+  assert.deepEqual([...result.data], [1, 2, 3])
+})
+
+test('WebSocket simulator exposes disconnect and recovery transitions', async () => {
+  const statuses = []
+  const errors = []
+  let hooks
+  let state = 'idle'
+  const ws = {
+    start() { state = 'connecting'; return Promise.resolve() },
+    close() { state = 'idle' },
+    getConnectionStatus() { return { state, reconnectAttempts: state === 'reconnecting' ? 1 : 0 } },
+  }
+  const client = new FeishuClient({
+    appId: 'cli_0000000000000000',
+    appSecret: 'secret',
+    onMessage() {},
+    onError(err) { errors.push(err) },
+    onStatus(info) { statuses.push(info.type) },
+    wsFactory(params) { hooks = params; return ws },
+  })
+  client.loadBotInfo = async () => null
+
+  client.start()
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(client.connectionStatus(), 'connecting')
+
+  state = 'connected'
+  hooks.onReady()
+  assert.equal(client.connectionStatus(), 'connected')
+
+  state = 'reconnecting'
+  hooks.onReconnecting()
+  assert.equal(client.connectionStatus(), 'reconnecting')
+
+  state = 'connected'
+  hooks.onReconnected()
+  hooks.onError(new Error('terminal disconnect'))
+
+  assert.deepEqual(statuses, ['ws-start', 'ws-started', 'ws-ready', 'ws-reconnecting', 'ws-reconnected', 'ws-failed'])
+  assert.match(errors[0]?.message || '', /terminal disconnect/)
+  assert.equal(client.diagnostics().wsReconnects, 1)
+  assert.equal(client.diagnostics().wsFailures, 1)
+  client.stop()
 })
 
 test('same-message card updates are serialized and queued states are coalesced', async () => {
