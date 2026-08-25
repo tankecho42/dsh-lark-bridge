@@ -23,6 +23,7 @@ check('registry non-empty', commands.length >= 8)
 check('find /help', findCommand('help')?.name === 'help')
 check('find /? alias', findCommand('?')?.name === 'help')
 check('find /mode', findCommand('mode')?.name === 'mode')
+check('find /cwd', findCommand('cwd')?.name === 'cwd')
 check('unknown → null', findCommand('nosuchcmd') === null)
 check('every command has desc', commands.every((c) => c.desc))
 
@@ -35,6 +36,24 @@ const stubFeishu = () => {
       sendText: async (cid, t) => { sent.push({ cid, text: t }) },
     },
   }
+}
+
+// /cwd — show and switch/reset
+{
+  const { sent, feishu } = stubFeishu()
+  let setTo = ''
+  let reset = 0
+  const sessions = {
+    cwdOf: () => '/current/workspace',
+    setCwd: (_chatId, input) => { setTo = input; return '/next/workspace' },
+    reset: async () => { reset++ },
+  }
+  await findCommand('cwd').run({ sessions, feishu, chatId: 'oc_t', arg: '' })
+  check('/cwd shows current workspace', bodyText(sent[0]?.card).includes('/current/workspace'))
+  await findCommand('cwd').run({ sessions, feishu, chatId: 'oc_t', arg: '/next/workspace' })
+  check('/cwd switch persists requested path', setTo === '/next/workspace')
+  check('/cwd switch starts a fresh session', reset === 1)
+  check('/cwd switch confirms canonical path', bodyText(sent[1]?.card).includes('/next/workspace'))
 }
 
 // /help — native table
@@ -106,7 +125,7 @@ const stubPresets = () => ({
   let saved = null
   const ctx = {
     agentDefaultModel: {
-      currentSelection: () => ({ provider: 'deepseek', model: 'glm-5.2' }),
+      currentSelection: () => ({ provider: 'deepseek', model: 'glm-5.2', reasoningEffort: 'high' }),
       saveSelection: async (next) => { saved = next },
     },
     get: () => null,
@@ -117,6 +136,7 @@ const stubPresets = () => ({
     ctx, feishu, chatId: 'oc_t',
   })
   check('model_switch saves', saved?.provider === 'zai' && saved?.model === 'glm-5.3')
+  check('model_switch preserves reasoning effort', saved?.reasoningEffort === 'high' && !('reasoning' in saved))
   check('model_switch returns card', res?.card != null)
 }
 
@@ -137,6 +157,42 @@ const stubPresets = () => ({
   await findCommand('status').run({ ctx, sessions, feishu, chatId: 'oc_t' })
   check('/status native table', !!sent[0].card.body.elements.find((e) => e.tag === 'table'))
   check('/status shows model', bodyText(sent[0].card).includes('glm-5.2'))
+}
+
+// /tools — inventory, text toggle and card toggle
+{
+  const { sent, feishu } = stubFeishu()
+  const changes = []
+  let resets = 0
+  const sessions = {
+    toolDenyOf: () => ['shell'],
+    setToolEnabled: (_chatId, name, enabled) => changes.push({ name, enabled }),
+    reset: async () => { resets++ },
+  }
+  const ctx = {
+    get(name) {
+      if (name === 'tools') return { view: () => ({ visible: new Map([['shell', {}], ['read_file', {}], ['run_code', {}]]) }) }
+      if (name === 'pluginInventory') return { list: async () => [{ id: 'plugin-a' }] }
+      return null
+    },
+  }
+  await findCommand('tools').run({ ctx, sessions, feishu, chatId: 'oc_t', arg: '' })
+  const buttons = sent[0].card.body.elements.flatMap((e) => e.tag === 'column_set' ? e.columns.flatMap((c) => c.elements) : [])
+  check('/tools shows disabled state', bodyText(sent[0].card).includes('已停用'))
+  check('/tools provides toggle buttons', buttons.some((b) => b.value?.bridge_action === 'tool_toggle'))
+  check('/tools keeps run_code locked', !buttons.some((b) => b.value?.tool_name === 'run_code'))
+
+  await findCommand('tools').run({ ctx, sessions, feishu, chatId: 'oc_t', arg: 'off read_file' })
+  check('/tools text toggle persists', changes.some((c) => c.name === 'read_file' && c.enabled === false))
+  check('/tools text toggle resets session', resets === 1)
+
+  const result = await handleBridgeAction({
+    action: { value: { bridge_action: 'tool_toggle', tool_name: 'shell', enabled: true } },
+    operator: { openId: 'ou_admin' }, ctx, sessions, feishu, chatId: 'oc_t',
+  })
+  check('tool_toggle card action persists', changes.some((c) => c.name === 'shell' && c.enabled === true))
+  check('tool_toggle card action resets session', resets === 2)
+  check('tool_toggle returns refreshed card', result?.card?.schema === '2.0')
 }
 
 // /sessions — native table with status column

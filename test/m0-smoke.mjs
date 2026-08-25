@@ -10,6 +10,9 @@
  * 用法: node test/m0-smoke.mjs
  */
 import { createRequire } from 'node:module'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 const require = createRequire(import.meta.url)
 const mod = await import('../lib/index.js')
@@ -42,6 +45,8 @@ try {
 // --- 3. mock ctx + apply (mock effect executes immediately, like real Cordis) ---
 const registeredTools = []
 const registeredEffects = []
+let effectDispose
+const testDataDir = mkdtempSync(join(tmpdir(), 'dsh-lark-m0-'))
 const mockCtx = {
   tools: {
     register(tool) {
@@ -50,15 +55,17 @@ const mockCtx = {
   },
   effect(fn) {
     registeredEffects.push(fn)
-    return fn() // real Cordis runs the effect body immediately; capture disposer
+    effectDispose = fn() // real Cordis runs the effect body immediately; capture disposer
+    return effectDispose
   },
+  on() {},
   logger: {
     info() {},
     warn() {},
   },
 }
 
-await mod.apply(mockCtx, mod.Config({}))
+await mod.apply(mockCtx, mod.Config({ dataDir: testDataDir }))
 
 check('apply registered 1 tool', registeredTools.length === 1, registeredTools.map((t) => t.name))
 const statusTool = registeredTools[0]
@@ -66,12 +73,12 @@ check('tool name lark_bridge_status', statusTool.name === 'lark_bridge_status')
 
 const result = await statusTool.execute({}, { agent: undefined })
 check('tool execute ok', result.ok === true, result)
-check('tool message mentions M0', String(result.message).includes('M0'), result.message)
+check('tool message mentions current milestone', String(result.message).includes('M2'), result.message)
 
 // --- 4. effects (server start) ---
 check('apply registered effect', registeredEffects.length === 1)
-// run the effect fn — it starts the internal server; the disposer is returned
-const dispose = registeredEffects[0]()
+// effect ran immediately and returned its disposer
+const dispose = effectDispose
 if (typeof dispose !== 'function') check('effect returns disposer', false, typeof dispose)
 else check('effect returns disposer', true)
 
@@ -80,10 +87,7 @@ await new Promise((r) => setTimeout(r, 300))
 
 // find the listening port by scanning the payload — the status endpoint is
 // loopback-only; discover port via lsof-free trick: re-check log file
-import { readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-const logPath = join(homedir(), '.dsh', 'lark-bridge', 'logs', 'plugin.log')
+const logPath = join(testDataDir, 'logs', 'plugin.log')
 let port = 0
 try {
   const text = readFileSync(logPath, 'utf8')
@@ -99,11 +103,13 @@ if (port > 0) {
   const body = await resp.json()
   check('GET /status 200', resp.status === 200, resp.status)
   check('status payload plugin', body.plugin === '@tankecho42/dsh-lark-bridge', body.plugin)
-  check('status payload milestone M0', body.milestone === 'M0', body.milestone)
+  check('status payload milestone M2', body.milestone === 'M2', body.milestone)
+  check('status payload version', body.version === '0.2.0', body.version)
 }
 
 // --- cleanup ---
 if (typeof dispose === 'function') dispose()
+rmSync(testDataDir, { recursive: true, force: true })
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURES`)
 process.exit(failures === 0 ? 0 : 1)

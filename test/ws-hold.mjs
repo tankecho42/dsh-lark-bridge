@@ -1,8 +1,11 @@
 // 常驻 WS 连接：供飞书后台「长连接验证」用，验证通过后 Ctrl 由外部 kill
 import { WSClient, EventDispatcher } from '@larksuiteoapi/node-sdk'
+const appId = process.env.LARK_APP_ID
+const appSecret = process.env.LARK_APP_SECRET
+if (!appId || !appSecret) throw new Error('set LARK_APP_ID and LARK_APP_SECRET before running this manual test')
 const client = new WSClient({
-  appId: 'cli_aa0280b713b89be7',
-  appSecret: 'VOUKsODEBTryL5EZSutRxbmlkuP6tpR6',
+  appId,
+  appSecret,
   domain: 'https://open.feishu.cn',
   loggerLevel: 'info',
 })

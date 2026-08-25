@@ -1,5 +1,6 @@
 # dsh-lark-bridge — installable DSH profile bundle layer.
-# M0: minimal skeleton. The plugin row below is merged into the profile tree
+# M2: Feishu long connection, persistent chat sessions and interactive cards.
+# The plugin row below is merged into the profile tree
 # after dsh-base / dsh-web-app; config keys must match src Config schema.
 - insert:
     - id: dsh-lark-bridge
@@ -8,4 +9,10 @@
         appId: ''
         appSecret: ''
         dataDir: ''
+        webUrl: 'http://127.0.0.1:3080'
+        defaultCwd: ''
+        workspaceRoots: []
+        allowedUserIds: []
+        allowedChatIds: []
+        adminUserIds: []
         autoStart: true
