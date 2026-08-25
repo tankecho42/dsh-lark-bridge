@@ -59,6 +59,8 @@ profile 的 `cordis.patch.yml` 里对 `dsh-lark-bridge` 行的 config 覆盖：
 npm test
 ```
 
+上线前请先执行 [安全与发布手册](SECURITY.md)，尤其是密钥轮换与 Git 历史清理步骤。
+
 ## License
 
 MIT
