@@ -73,7 +73,7 @@ check('tool name lark_bridge_status', statusTool.name === 'lark_bridge_status')
 
 const result = await statusTool.execute({}, { agent: undefined })
 check('tool execute ok', result.ok === true, result)
-check('tool message mentions current milestone', String(result.message).includes('M2'), result.message)
+check('tool message mentions current milestone', String(result.message).includes('M3'), result.message)
 
 // --- 4. effects (server start) ---
 check('apply registered effect', registeredEffects.length === 1)
@@ -103,8 +103,10 @@ if (port > 0) {
   const body = await resp.json()
   check('GET /status 200', resp.status === 200, resp.status)
   check('status payload plugin', body.plugin === '@tankecho42/dsh-lark-bridge', body.plugin)
-  check('status payload milestone M2', body.milestone === 'M2', body.milestone)
-  check('status payload version', body.version === '0.2.0', body.version)
+  check('status payload milestone M3', body.milestone === 'M3', body.milestone)
+  check('status payload version', body.version === '0.3.0', body.version)
+  check('status payload exposes safe transport metrics', body.apiRetries === 0 && body.pendingCardMessages === 0, body)
+  check('status payload exposes rotated log path', String(body.logPath).endsWith('/logs/plugin.log'), body.logPath)
 }
 
 // --- cleanup ---

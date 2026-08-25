@@ -24,6 +24,7 @@ check('find /help', findCommand('help')?.name === 'help')
 check('find /? alias', findCommand('?')?.name === 'help')
 check('find /mode', findCommand('mode')?.name === 'mode')
 check('find /cwd', findCommand('cwd')?.name === 'cwd')
+check('find /doctor', findCommand('doctor')?.name === 'doctor')
 check('unknown → null', findCommand('nosuchcmd') === null)
 check('every command has desc', commands.every((c) => c.desc))
 
@@ -201,6 +202,28 @@ const stubPresets = () => ({
   const sessions = { sessionIds: new Map([['oc_a', 'lark-1']]), handles: new Map([['oc_a', {}]]) }
   await findCommand('sessions').run({ sessions, feishu, chatId: 'oc_a' })
   check('/sessions table + live marker', bodyText(sent[0].card).includes('🟢'))
+}
+
+// /doctor — read-only health checks and queue diagnostics
+{
+  const { sent, feishu } = stubFeishu()
+  feishu.connectionStatus = () => 'connected'
+  feishu.diagnostics = () => ({ pendingCardMessages: 0, coalescedCardUpdates: 2, retries: 1 })
+  const sessions = {
+    cwdOf: () => '/tmp',
+    dataDir: '/tmp',
+    sessionIds: new Map([['oc_t', 'lark-doctor-session']]),
+  }
+  const ctx = {
+    agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek', model: 'glm-5.2' }) },
+    get: (name) => name === 'tools' ? { view: () => ({ visible: new Map([['shell', {}]]) }) } : null,
+  }
+  await findCommand('doctor').run({ ctx, sessions, feishu, chatId: 'oc_t' })
+  const output = bodyText(sent[0]?.card)
+  check('/doctor reports connected transport', output.includes('connected'))
+  check('/doctor checks writable directories', output.includes('可读写'))
+  check('/doctor includes retry and queue metrics', output.includes('已合并 2 次') && output.includes('1 次'))
+  check('/doctor never renders credential values', !output.includes('cli_test') && !output.includes('app-secret-value'))
 }
 
 // legacy buildCommandCard still exports (index.js compat)

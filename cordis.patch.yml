@@ -1,5 +1,5 @@
 # dsh-lark-bridge — installable DSH profile bundle layer.
-# M2: Feishu long connection, persistent chat sessions and interactive cards.
+# M3: resilient Feishu transport, persistent sessions and interactive cards.
 # The plugin row below is merged into the profile tree
 # after dsh-base / dsh-web-app; config keys must match src Config schema.
 - insert:
@@ -15,4 +15,6 @@
         allowedUserIds: []
         allowedChatIds: []
         adminUserIds: []
+        logMaxBytes: 5242880
+        logBackups: 3
         autoStart: true

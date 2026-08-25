@@ -39,9 +39,9 @@ approval, force-push branches and tags, then re-add the environment-only manual
 tests in a clean commit. Do not merge an old clone back into the rewritten
 history.
 
-## M2 deployment checklist
+## Deployment checklist
 
-- Review `codex/m2-hardening` and its test/CI changes.
+- Review the release-candidate branch and its test/CI changes.
 - Configure `allowedUserIds`, `allowedChatIds`, `adminUserIds`, and
   `workspaceRoots` before exposing the bridge to production chats.
 - Record the current production commit and process details as the rollback
@@ -51,8 +51,8 @@ history.
 - Restart one bridge instance only; confirm the old WebSocket closes before the
   replacement accepts traffic.
 - Verify p2p chat, a real group mention, ignored non-mentions, `/cwd`, `/tools`,
-  `/stop`, approval allow/reject/session-allow, duplicate event suppression,
-  and one HMR/reload cycle.
+  `/doctor`, `/stop`, approval allow/reject/session-allow, duplicate event
+  suppression, retry behavior, log rotation, and one HMR/reload cycle.
 - Observe bridge logs and WebSocket state before widening access.
 
 Rollback by reverting the reviewed deployment commit and restarting the single

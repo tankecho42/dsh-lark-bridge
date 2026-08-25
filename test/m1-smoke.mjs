@@ -5,7 +5,7 @@
  *  1. ESM import 不炸（含 peer deps 解析）
  *  2. inject 数组含 agents / agentDefaultModel
  *  3. apply() 在未配置 appId/appSecret 时不启动飞书 WS（不抛错）
- *  4. lark_bridge_status 工具 execute 返回当前 M2 标记
+ *  4. lark_bridge_status 工具 execute 返回当前里程碑标记
  *  5. session/event handler 已注册（ctx.on 被调用）
  * 用法: NODE_PATH=<deepseek-harness>/node_modules node test/m1-smoke.mjs
  */
@@ -64,7 +64,7 @@ if (statusTool) {
   check('tool name lark_bridge_status', statusTool.name === 'lark_bridge_status')
   const result = await statusTool.execute({}, {})
   check('tool execute ok', result.ok === true, result)
-  check('tool message mentions M2', String(result.message).includes('M2'), result.message)
+  check('tool message mentions M3', String(result.message).includes('M3'), result.message)
 }
 
 // --- 5. session/event handler registered ---
