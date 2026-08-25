@@ -120,25 +120,40 @@ const stubPresets = () => ({
   check('mode_switch card shows operator', bodyText(res.card).includes('Derek'))
 }
 
-// card action: model_switch
+// card action: model_switch (per-chat override; global default untouched)
 {
   const { sent, feishu } = stubFeishu()
-  let saved = null
+  let globalSaved = null
+  const chatModels = new Map()
   const ctx = {
     agentDefaultModel: {
       currentSelection: () => ({ provider: 'deepseek', model: 'glm-5.2', reasoningEffort: 'high' }),
-      saveSelection: async (next) => { saved = next },
+      saveSelection: async (next) => { globalSaved = next },
     },
     get: () => null,
+  }
+  const sessions = {
+    chatModelOf: (cid) => chatModels.get(cid) || null,
+    setChatModel: (cid, provider, model) => { chatModels.set(cid, { provider, model }) },
+    clearChatModel: (cid) => chatModels.delete(cid),
+    refreshAgent: async () => true,
   }
   const res = await handleBridgeAction({
     action: { value: { bridge_action: 'model_switch', provider: 'zai', model: 'glm-5.3' } },
     operator: { openId: 'ou_test' },
-    ctx, feishu, chatId: 'oc_t',
+    ctx, sessions, feishu, chatId: 'oc_t',
   })
-  check('model_switch saves', saved?.provider === 'zai' && saved?.model === 'glm-5.3')
-  check('model_switch preserves reasoning effort', saved?.reasoningEffort === 'high' && !('reasoning' in saved))
+  check('model_switch saves per-chat override', chatModels.get('oc_t')?.provider === 'zai' && chatModels.get('oc_t')?.model === 'glm-5.3')
+  check('model_switch leaves global default untouched', globalSaved === null)
   check('model_switch returns card', res?.card != null)
+
+  const reset = await handleBridgeAction({
+    action: { value: { bridge_action: 'model_reset' } },
+    operator: { openId: 'ou_test' },
+    ctx, sessions, feishu, chatId: 'oc_t',
+  })
+  check('model_reset drops the override', !chatModels.has('oc_t'))
+  check('model_reset returns card', reset?.card != null)
 }
 
 // card action: unknown → null (card not ours)
@@ -158,6 +173,48 @@ const stubPresets = () => ({
   await findCommand('status').run({ ctx, sessions, feishu, chatId: 'oc_t' })
   check('/status native table', !!sent[0].card.body.elements.find((e) => e.tag === 'table'))
   check('/status shows model', bodyText(sent[0].card).includes('glm-5.2'))
+}
+
+// /model — per-chat semantics
+{
+  const { sent, feishu } = stubFeishu()
+  const chatModels = new Map()
+  let globalSaved = null
+  let refreshed = 0
+  const sessions = {
+    chatModelOf: (cid) => chatModels.get(cid) || null,
+    setChatModel: (cid, p, m) => { chatModels.set(cid, { provider: p, model: m }) },
+    clearChatModel: (cid) => chatModels.delete(cid),
+    refreshAgent: async () => { refreshed++ },
+  }
+  const ctx = {
+    agentDefaultModel: {
+      currentSelection: () => ({ provider: 'deepseek', model: 'glm-5.2' }),
+      saveSelection: async (next) => { globalSaved = next },
+    },
+    get: () => null,
+  }
+
+  // plain view follows global default
+  await findCommand('model').run({ ctx, sessions, feishu, chatId: 'oc_t', arg: '' })
+  check('/model view follows global default', bodyText(sent[0].card).includes('glm-5.2'))
+  check('/model view marks per-chat scope', bodyText(sent[0].card).includes('本会话'))
+
+  // positional switch writes the chat override only
+  await findCommand('model').run({ ctx, sessions, feishu, chatId: 'oc_t', arg: 'zai/glm-5.3' })
+  check('/model switch saves override', chatModels.get('oc_t')?.model === 'glm-5.3')
+  check('/model switch keeps global untouched', globalSaved === null)
+  check('/model switch refreshes agent', refreshed === 1)
+
+  // view now shows the override
+  await findCommand('model').run({ ctx, sessions, feishu, chatId: 'oc_t', arg: '' })
+  check('/model view shows override', bodyText(sent[2].card).includes('glm-5.3'))
+  check('/model view offers reset', bodyText(sent[2].card).includes('全局默认'))
+
+  // /model reset restores global following
+  await findCommand('model').run({ ctx, sessions, feishu, chatId: 'oc_t', arg: 'reset' })
+  check('/model reset drops override', !chatModels.has('oc_t'))
+  check('/model reset refreshes agent', refreshed === 2)
 }
 
 // /tools — inventory, text toggle and card toggle
