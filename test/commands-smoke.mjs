@@ -265,7 +265,19 @@ const stubPresets = () => ({
 {
   const { sent, feishu } = stubFeishu()
   feishu.connectionStatus = () => 'connected'
-  feishu.diagnostics = () => ({ pendingCardMessages: 0, coalescedCardUpdates: 2, retries: 1 })
+  feishu.diagnostics = () => ({
+    pendingCardMessages: 0,
+    coalescedCardUpdates: 2,
+    retries: 1,
+    bridge: {
+      plugin: '@tankecho42/dsh-lark-bridge',
+      version: '0.4.0',
+      healthFailures: 0,
+      healthAlerts: 0,
+      healthHost: '127.0.0.1',
+      healthPort: 51520,
+    },
+  })
   const sessions = {
     cwdOf: () => '/tmp',
     dataDir: '/tmp',
@@ -278,6 +290,7 @@ const stubPresets = () => ({
   await findCommand('doctor').run({ ctx, sessions, feishu, chatId: 'oc_t' })
   const output = bodyText(sent[0]?.card)
   check('/doctor reports connected transport', output.includes('connected'))
+  check('/doctor reports bridge package version', output.includes('@tankecho42/dsh-lark-bridge@0.4.0'))
   check('/doctor checks writable directories', output.includes('可读写'))
   check('/doctor includes retry and queue metrics', output.includes('已合并 2 次') && output.includes('1 次'))
   check('/doctor never renders credential values', !output.includes('cli_test') && !output.includes('app-secret-value'))

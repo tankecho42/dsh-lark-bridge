@@ -48,11 +48,25 @@ test('health endpoints fail closed and an old HMR disposer preserves the new dis
     apply(second.ctx, Config({ dataDir: root, autoStart: false }))
     const secondRecord = await waitForRecord(endpointPath, firstRecord.owner)
     assert.notEqual(firstRecord.owner, secondRecord.owner)
+    assert.equal(secondRecord.plugin, '@tankecho42/dsh-lark-bridge')
+    assert.equal(secondRecord.version, '0.4.0')
 
     const health = await fetch(`http://${secondRecord.host}:${secondRecord.port}/healthz`)
     assert.equal(health.status, 200)
+    assert.deepEqual(await health.json(), {
+      ok: true,
+      plugin: '@tankecho42/dsh-lark-bridge',
+      version: '0.4.0',
+    })
     const ready = await fetch(`http://${secondRecord.host}:${secondRecord.port}/readyz`)
     assert.equal(ready.status, 503)
+    assert.deepEqual(await ready.json(), {
+      ok: false,
+      plugin: '@tankecho42/dsh-lark-bridge',
+      version: '0.4.0',
+      wsState: 'stopped',
+      configured: false,
+    })
     const metrics = await fetch(`http://${secondRecord.host}:${secondRecord.port}/metrics`)
     assert.match(await metrics.text(), /dsh_lark_bridge_ready 0/)
 

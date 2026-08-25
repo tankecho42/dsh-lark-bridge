@@ -9,10 +9,12 @@
   "main": "./lib/index.js",
   "scripts": {
     "test": "node --test test/*.test.mjs && node test/m0-smoke.mjs && node test/m1-smoke.mjs && node test/commands-smoke.mjs",
-    "check": "npm test"
+    "check": "npm test",
+    "release:gate": "node scripts/release-gate.mjs"
   },
   "files": [
     "lib",
+    "scripts",
     "cordis.patch.yml",
     "README.md",
     "SECURITY.md",

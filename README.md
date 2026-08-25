@@ -91,7 +91,7 @@ npm pack --dry-run
 
 自动化测试使用本地 Feishu 资源服务与 DSH agent/attachment 双端模拟器，覆盖限频、5xx、断线重连、线程路由、超限附件、媒体清理、审批超时和 HMR 发现文件竞争；不需要真实飞书凭据。
 
-上线前请先执行 [安全与发布手册](SECURITY.md)，尤其是密钥轮换与 Git 历史清理步骤。
+上线前请先执行 [安全与发布手册](SECURITY.md)，尤其是密钥轮换、Git 历史清理和 live profile 不得热链开发工作树的发布门禁。生产 profile 只允许精确发布版本或校验 SHA-256 的 `.tgz`；重启后以 `/healthz`/`/readyz` 自报的 bridge 包名和版本验收。
 
 ## License
 
