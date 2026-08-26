@@ -37,6 +37,33 @@ test('AccessPolicy keeps empty lists compatible and enforces configured boundari
   assert.equal(policy.canApprove('admin', 'someone-else'), true)
 })
 
+test('AccessPolicy warns with approval context when requester-miss uses the legacy fallback', () => {
+  const warnings = []
+  const policy = new AccessPolicy({
+    allowedUserIds: ['member'],
+    adminUserIds: ['admin'],
+    warn(message, data) { warnings.push({ message, data }) },
+  })
+  const context = {
+    rpcId: 'rpc-missing',
+    approvalId: 'approval-missing',
+    interaction: 'card-action',
+    chatId: 'chat-1',
+    sessionId: 'session-1',
+  }
+
+  assert.equal(policy.canApprove('member', '', context), true)
+  assert.deepEqual(warnings, [{
+    message: 'approval requester missing; legacy fallback allowed',
+    data: { ...context, userId: 'member' },
+  }])
+
+  assert.equal(policy.canApprove('member', 'member', context), true)
+  assert.equal(policy.canApprove('member', 'someone-else', context), false)
+  assert.equal(policy.canApprove('admin', '', context), true)
+  assert.equal(warnings.length, 1)
+})
+
 test('SessionManager persists per-chat cwd and creates the next session there', async () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-lark-sessions-'))
   const workspace = join(root, 'workspace')
