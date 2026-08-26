@@ -54,6 +54,8 @@ profile 的 `cordis.patch.yml` 里对 `dsh-lark-bridge` 行的 config 覆盖：
 
 白名单为空时不限制，兼容旧配置。建议生产环境至少配置 `allowedUserIds` 和 `adminUserIds`；`workspaceRoots` 非空时，`/cwd` 只能切换到这些目录或其子目录。
 
+审计前提：`adminUserIds` 为空时 `isAdmin` 回退为白名单语义（空=不限制），审批路径会在管理员检查处提前放行，requester 缺失的 legacy fallback 警告日志在该配置下不可达。若部署期望 requester-miss 放行可审计，必须显式配置 `adminUserIds`。
+
 ## 飞书命令
 
 - `/help`：命令清单
